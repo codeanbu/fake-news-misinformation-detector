@@ -7,11 +7,7 @@ The application supports direct article input, TXT files, CSV batch prediction, 
 ## 🚀 Live Demo
 
 🌐 **Streamlit App:**  
-<<<<<<< HEAD
-https://fake-news-misinformation-detector-hhfvkmpg6sreyqqrlf9x8j.streamlit.app/
-=======
-[Add your Streamlit URL here]
->>>>>>> f6c9170 (Add professional project documentation)
+https://fake-news-misinformation-detector-hhfvkmpg6sreyqqrlf9x8j.streamlit.app
 
 🤗 **Hugging Face Model:**  
 https://huggingface.co/anbucode/fake-news-distilbert
