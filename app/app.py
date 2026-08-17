@@ -19,6 +19,26 @@ st.set_page_config(
 
 
 # ============================================================
+# SESSION STATE
+# ============================================================
+
+if "prediction_done" not in st.session_state:
+    st.session_state.prediction_done = False
+
+if "prediction" not in st.session_state:
+    st.session_state.prediction = None
+
+if "probs" not in st.session_state:
+    st.session_state.probs = None
+
+if "analyzed_news" not in st.session_state:
+    st.session_state.analyzed_news = ""
+
+if "explanation" not in st.session_state:
+    st.session_state.explanation = None
+
+
+# ============================================================
 # SIDEBAR
 # ============================================================
 
@@ -69,18 +89,22 @@ tokenizer, model, device = initialize()
 # MAIN PAGE
 # ============================================================
 
-st.title("📰 AI-Powered Fake News & Misinformation Detector")
+st.title(
+    "📰 AI-Powered Fake News & Misinformation Detector"
+)
 
-st.markdown("""
-Detect whether a news article is **Fake** or **Real**
-using a **fine-tuned DistilBERT Transformer** model.
-""")
+st.markdown(
+    """
+    Detect whether a news article is **Fake** or **Real**
+    using a **fine-tuned DistilBERT Transformer** model.
+    """
+)
 
 st.markdown("---")
 
 
 # ============================================================
-# NEWS TEXT INPUT
+# NEWS INPUT
 # ============================================================
 
 news = st.text_area(
@@ -110,11 +134,16 @@ if uploaded_file is not None:
     # TXT FILE
     # ========================================================
 
-    if uploaded_file.name.endswith(".txt"):
+    if uploaded_file.name.lower().endswith(".txt"):
 
-        news = uploaded_file.read().decode("utf-8")
+        news = uploaded_file.read().decode(
+            "utf-8",
+            errors="ignore"
+        )
 
-        st.success("✅ TXT file loaded successfully!")
+        st.success(
+            "✅ TXT file loaded successfully!"
+        )
 
         st.text_area(
             "Uploaded Article",
@@ -126,19 +155,35 @@ if uploaded_file is not None:
     # CSV FILE
     # ========================================================
 
-    elif uploaded_file.name.endswith(".csv"):
+    elif uploaded_file.name.lower().endswith(".csv"):
 
-        batch_df = pd.read_csv(uploaded_file)
+        try:
 
-        st.success("✅ CSV loaded successfully!")
+            batch_df = pd.read_csv(
+                uploaded_file
+            )
 
-        st.write("Preview")
+            st.success(
+                "✅ CSV loaded successfully!"
+            )
 
-        st.dataframe(batch_df.head())
+            st.write("### Preview")
 
-        st.info(
-            "Click 'Analyze News' to classify every article."
-        )
+            st.dataframe(
+                batch_df.head(),
+                use_container_width=True
+            )
+
+            st.info(
+                "Click 'Analyze News' to classify "
+                "every article."
+            )
+
+        except Exception as e:
+
+            st.error(
+                f"❌ Could not read CSV: {e}"
+            )
 
 
 # ============================================================
@@ -156,13 +201,19 @@ if news_url:
 
     try:
 
-        article = extract_article(news_url)
+        article = extract_article(
+            news_url
+        )
 
         news = article["text"]
 
-        st.success("✅ Article extracted successfully!")
+        st.success(
+            "✅ Article extracted successfully!"
+        )
 
-        st.subheader("Extracted Article")
+        st.subheader(
+            "Extracted Article"
+        )
 
         st.text_area(
             "Article Content",
@@ -172,17 +223,22 @@ if news_url:
 
     except Exception as e:
 
-        st.error(f"❌ {e}")
+        st.error(
+            f"❌ Could not extract article: {e}"
+        )
 
 
 # ============================================================
 # ANALYZE BUTTON
 # ============================================================
 
-if st.button(
+analyze_clicked = st.button(
     "🔍 Analyze News",
     use_container_width=True
-):
+)
+
+
+if analyze_clicked:
 
     # ========================================================
     # BATCH CSV PREDICTION
@@ -201,64 +257,93 @@ if st.button(
             predictions = []
             confidences = []
 
-            progress = st.progress(0.0)
-
-            total_articles = len(batch_df)
-
-            for i, article in enumerate(
-                batch_df["text"]
-            ):
-
-                prediction, probs = predict(
-                    str(article),
-                    tokenizer,
-                    model,
-                    device
-                )
-
-                confidence = (
-                    float(probs[prediction]) * 100
-                )
-
-                predictions.append(
-                    "Fake"
-                    if prediction == 0
-                    else "Real"
-                )
-
-                confidences.append(
-                    round(confidence, 2)
-                )
-
-                progress.progress(
-                    float((i + 1) / total_articles)
-                )
-
-            batch_df["Prediction"] = predictions
-            batch_df["Confidence"] = confidences
-
-            st.success(
-                "✅ Batch prediction completed!"
+            total_articles = len(
+                batch_df
             )
 
-            st.dataframe(batch_df)
+            if total_articles == 0:
 
-            csv = batch_df.to_csv(
-                index=False
-            ).encode("utf-8")
+                st.warning(
+                    "⚠ The CSV file contains no articles."
+                )
 
-            st.download_button(
-                "📥 Download Predictions",
-                csv,
-                "predictions.csv",
-                "text/csv"
-            )
+            else:
+
+                progress = st.progress(
+                    0.0
+                )
+
+                for i, article in enumerate(
+                    batch_df["text"]
+                ):
+
+                    prediction, probs = predict(
+                        str(article),
+                        tokenizer,
+                        model,
+                        device
+                    )
+
+                    confidence = (
+                        float(
+                            probs[prediction]
+                        )
+                        * 100.0
+                    )
+
+                    predictions.append(
+                        "Fake"
+                        if prediction == 0
+                        else "Real"
+                    )
+
+                    confidences.append(
+                        round(
+                            confidence,
+                            2
+                        )
+                    )
+
+                    progress.progress(
+                        float(
+                            (i + 1)
+                            / total_articles
+                        )
+                    )
+
+                batch_df["Prediction"] = (
+                    predictions
+                )
+
+                batch_df["Confidence"] = (
+                    confidences
+                )
+
+                st.success(
+                    "✅ Batch prediction completed!"
+                )
+
+                st.dataframe(
+                    batch_df,
+                    use_container_width=True
+                )
+
+                csv = batch_df.to_csv(
+                    index=False
+                ).encode("utf-8")
+
+                st.download_button(
+                    label="📥 Download Predictions",
+                    data=csv,
+                    file_name="predictions.csv",
+                    mime="text/csv"
+                )
 
     # ========================================================
-    # SINGLE ARTICLE PREDICTION
+    # SINGLE ARTICLE
     # ========================================================
 
-    elif news.strip() == "":
+    elif not news or not news.strip():
 
         st.warning(
             "⚠ Please enter a news article."
@@ -266,228 +351,358 @@ if st.button(
 
     else:
 
-        prediction, probs = predict(
-            news,
-            tokenizer,
-            model,
-            device
-        )
+        try:
 
-        # Convert NumPy values to Python floats
-        fake_probability = float(probs[0])
-        real_probability = float(probs[1])
-        confidence = float(probs[prediction]) * 100
+            # ====================================================
+            # MODEL PREDICTION
+            # ====================================================
 
-        st.markdown("---")
+            prediction, probs = predict(
+                news,
+                tokenizer,
+                model,
+                device
+            )
 
-        # ====================================================
-        # PREDICTION
-        # ====================================================
+            # ====================================================
+            # SAVE RESULT IN SESSION STATE
+            # ====================================================
 
-        st.subheader("📌 Prediction")
+            st.session_state.prediction = (
+                int(prediction)
+            )
 
-        if prediction == 0:
+            st.session_state.probs = (
+                probs
+            )
+
+            st.session_state.analyzed_news = (
+                news
+            )
+
+            st.session_state.prediction_done = (
+                True
+            )
+
+            # Clear previous explanation
+            st.session_state.explanation = None
+
+        except Exception as e:
 
             st.error(
-                "🔴 Fake News Detected"
+                f"❌ Prediction failed: {e}"
             )
 
-        else:
 
-            st.success(
-                "🟢 Real News"
+# ============================================================
+# DISPLAY SINGLE ARTICLE RESULT
+# ============================================================
+
+if st.session_state.prediction_done:
+
+    prediction = (
+        st.session_state.prediction
+    )
+
+    probs = (
+        st.session_state.probs
+    )
+
+    analyzed_news = (
+        st.session_state.analyzed_news
+    )
+
+    # ========================================================
+    # CONVERT NUMPY VALUES TO PYTHON FLOAT
+    # ========================================================
+
+    fake_probability = float(
+        probs[0]
+    )
+
+    real_probability = float(
+        probs[1]
+    )
+
+    confidence = (
+        float(
+            probs[prediction]
+        )
+        * 100.0
+    )
+
+    st.markdown("---")
+
+    # ========================================================
+    # PREDICTION
+    # ========================================================
+
+    st.subheader(
+        "📌 Prediction"
+    )
+
+    if prediction == 0:
+
+        st.error(
+            "🔴 Fake News Detected"
+        )
+
+    else:
+
+        st.success(
+            "🟢 Real News"
+        )
+
+    # ========================================================
+    # CONFIDENCE
+    # ========================================================
+
+    st.subheader(
+        "🎯 Confidence Score"
+    )
+
+    progress_value = float(
+        max(
+            0.0,
+            min(
+                1.0,
+                confidence / 100.0
             )
+        )
+    )
 
-        # ====================================================
-        # CONFIDENCE
-        # ====================================================
+    st.progress(
+        progress_value
+    )
 
-        st.subheader("🎯 Confidence Score")
+    st.write(
+        f"## {confidence:.2f}% Confidence"
+    )
 
-        # Streamlit requires a normal numeric value
-        progress_value = float(
-            max(0.0, min(1.0, confidence / 100.0))
+    # ========================================================
+    # PROBABILITY CARDS
+    # ========================================================
+
+    st.subheader(
+        "📊 Prediction Probabilities"
+    )
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+
+        st.metric(
+            "🔴 Fake",
+            f"{fake_probability * 100:.2f}%"
         )
 
-        st.progress(progress_value)
+    with col2:
 
-        st.write(
-            f"## {confidence:.2f}% Confidence"
+        st.metric(
+            "🟢 Real",
+            f"{real_probability * 100:.2f}%"
         )
 
-        # ====================================================
-        # PROBABILITY CARDS
-        # ====================================================
+    # ========================================================
+    # PLOTLY CHART
+    # ========================================================
 
-        st.subheader(
-            "📊 Prediction Probabilities"
-        )
+    fig = go.Figure()
 
-        col1, col2 = st.columns(2)
-
-        with col1:
-
-            st.metric(
-                "🔴 Fake",
-                f"{fake_probability * 100:.2f}%"
-            )
-
-        with col2:
-
-            st.metric(
-                "🟢 Real",
+    fig.add_trace(
+        go.Bar(
+            x=[
+                "Fake",
+                "Real"
+            ],
+            y=[
+                fake_probability * 100.0,
+                real_probability * 100.0
+            ],
+            text=[
+                f"{fake_probability * 100:.2f}%",
                 f"{real_probability * 100:.2f}%"
-            )
-
-        # ====================================================
-        # PLOTLY CHART
-        # ====================================================
-
-        fig = go.Figure()
-
-        fig.add_trace(
-            go.Bar(
-                x=["Fake", "Real"],
-                y=[
-                    fake_probability * 100,
-                    real_probability * 100
-                ],
-                text=[
-                    f"{fake_probability * 100:.2f}%",
-                    f"{real_probability * 100:.2f}%"
-                ],
-                textposition="outside"
-            )
+            ],
+            textposition="outside"
         )
+    )
 
-        fig.update_layout(
-            title="Prediction Confidence",
-            xaxis_title="Class",
-            yaxis_title="Probability (%)",
-            yaxis=dict(range=[0, 100]),
-            height=450
-        )
+    fig.update_layout(
+        title="Prediction Confidence",
+        xaxis_title="Class",
+        yaxis_title="Probability (%)",
+        yaxis=dict(
+            range=[0, 100]
+        ),
+        height=450
+    )
 
-        st.plotly_chart(
-            fig,
-            use_container_width=True
-        )
+    st.plotly_chart(
+        fig,
+        use_container_width=True
+    )
 
-        # ====================================================
-        # ARTICLE STATISTICS
-        # ====================================================
+    # ========================================================
+    # ARTICLE STATISTICS
+    # ========================================================
 
-        st.subheader(
-            "📝 Article Statistics"
+    st.subheader(
+        "📝 Article Statistics"
+    )
+
+    st.write(
+        f"**Words:** {len(analyzed_news.split())}"
+    )
+
+    st.write(
+        f"**Characters:** {len(analyzed_news)}"
+    )
+
+    # ========================================================
+    # MODEL INFORMATION
+    # ========================================================
+
+    with st.expander(
+        "ℹ️ Model Information"
+    ):
+
+        st.write(
+            "### Model Details"
         )
 
         st.write(
-            f"**Words:** {len(news.split())}"
+            "**Model:** DistilBERT"
         )
 
         st.write(
-            f"**Characters:** {len(news)}"
+            "**Framework:** "
+            "Hugging Face Transformers"
         )
 
-        # ====================================================
-        # MODEL INFORMATION
-        # ====================================================
+        st.write(
+            "**Backend:** PyTorch"
+        )
 
-        with st.expander(
-            "ℹ️ Model Information"
+        st.write(
+            "**Dataset Size:** "
+            "44,889 News Articles"
+        )
+
+        st.write(
+            "**Task:** Fake News Classification"
+        )
+
+        st.write(
+            "**Classes:** Fake / Real"
+        )
+
+        st.write(
+            f"**Device:** {device}"
+        )
+
+    # ========================================================
+    # RAW PROBABILITIES
+    # ========================================================
+
+    st.subheader(
+        "📋 Raw Probabilities"
+    )
+
+    st.json(
+        {
+            "Fake": round(
+                fake_probability,
+                6
+            ),
+            "Real": round(
+                real_probability,
+                6
+            )
+        }
+    )
+
+
+# ============================================================
+# LIME EXPLANATION
+# ============================================================
+
+if st.session_state.prediction_done:
+
+    st.markdown("---")
+
+    st.subheader(
+        "🧠 Explainable AI"
+    )
+
+    st.write(
+        "LIME identifies the words that influenced "
+        "the model's prediction."
+    )
+
+    explain_clicked = st.button(
+        "🧠 Explain Prediction",
+        use_container_width=True
+    )
+
+    if explain_clicked:
+
+        with st.spinner(
+            "🧠 Generating explanation... "
+            "This may take a few seconds."
         ):
 
-            st.write("### Model Details")
-
-            st.write(
-                "**Model:** DistilBERT"
-            )
-
-            st.write(
-                "**Framework:** Hugging Face Transformers"
-            )
-
-            st.write(
-                "**Backend:** PyTorch"
-            )
-
-            st.write(
-                "**Dataset Size:** 44,889 News Articles"
-            )
-
-            st.write(
-                "**Task:** Fake News Classification"
-            )
-
-            st.write(
-                "**Classes:** Fake / Real"
-            )
-
-            st.write(
-                f"**Device:** {device}"
-            )
-
-        # ====================================================
-        # RAW PROBABILITIES
-        # ====================================================
-
-        st.subheader(
-            "📋 Raw Probabilities"
-        )
-
-        st.json(
-            {
-                "Fake": round(
-                    fake_probability,
-                    6
-                ),
-                "Real": round(
-                    real_probability,
-                    6
-                )
-            }
-        )
-
-        # ====================================================
-        # LIME EXPLANATION
-        # ====================================================
-
-        st.markdown("---")
-
-        if st.button(
-            "🧠 Explain Prediction"
-        ):
-
-            with st.spinner(
-                "Generating explanation..."
-            ):
+            try:
 
                 explanation = explain_prediction(
-                    news,
+                    st.session_state.analyzed_news,
                     tokenizer,
                     model,
                     device
                 )
 
-                st.subheader(
-                    "🧠 Top Influential Words"
+                # Save explanation
+                st.session_state.explanation = (
+                    explanation
                 )
 
-                for word, weight in explanation:
+            except Exception as e:
 
-                    weight = float(weight)
+                st.error(
+                    f"❌ Explanation failed: {e}"
+                )
 
-                    if weight > 0:
 
-                        st.success(
-                            f"✅ {word} ({weight:.3f})"
-                        )
+# ============================================================
+# DISPLAY LIME EXPLANATION
+# ============================================================
 
-                    else:
+if st.session_state.explanation is not None:
 
-                        st.error(
-                            f"❌ {word} ({weight:.3f})"
-                        )
+    st.success(
+        "✅ Explanation generated successfully!"
+    )
+
+    st.subheader(
+        "🧠 Top Influential Words"
+    )
+
+    for word, weight in (
+        st.session_state.explanation
+    ):
+
+        weight = float(weight)
+
+        if weight > 0:
+
+            st.success(
+                f"✅ {word} ({weight:.3f})"
+            )
+
+        else:
+
+            st.error(
+                f"❌ {word} ({weight:.3f})"
+            )
 
 
 # ============================================================
@@ -497,6 +712,7 @@ if st.button(
 st.markdown("---")
 
 st.caption(
-    "🚀 AI-Powered Fake News & Misinformation Detection "
-    "using DistilBERT | Developed by Anbuselvan"
+    "🚀 AI-Powered Fake News & Misinformation "
+    "Detection using DistilBERT | "
+    "Developed by Anbuselvan"
 )
