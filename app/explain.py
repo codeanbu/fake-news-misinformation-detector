@@ -1,13 +1,20 @@
-print("🔥 LOADED MY NEW EXPLAIN.PY")
 import torch
 import numpy as np
 from lime.lime_text import LimeTextExplainer
 
 
+# ============================================================
+# LIME EXPLAINER
+# ============================================================
+
 explainer = LimeTextExplainer(
     class_names=["Fake", "Real"]
 )
 
+
+# ============================================================
+# PREDICTION FUNCTION FOR LIME
+# ============================================================
 
 def predict_proba(texts, tokenizer, model, device):
 
@@ -34,21 +41,44 @@ def predict_proba(texts, tokenizer, model, device):
 
             outputs = model(**inputs)
 
-            probs = torch.softmax(
+            probabilities = torch.softmax(
                 outputs.logits,
                 dim=1
             )
 
-        predictions.append(
-            probs[0].detach().cpu().numpy()
+        prediction = (
+            probabilities[0]
+            .detach()
+            .cpu()
+            .numpy()
         )
 
-    # IMPORTANT
-    # Convert the complete result to a NumPy matrix
-    return np.array(predictions, dtype=np.float64)
+        predictions.append(prediction)
+
+    predictions = np.asarray(
+        predictions,
+        dtype=np.float64
+    )
+
+    # LIME requires:
+    # (number_of_texts, number_of_classes)
+
+    if predictions.ndim != 2:
+        predictions = predictions.reshape(-1, 2)
+
+    return predictions
 
 
-def explain_prediction(text, tokenizer, model, device):
+# ============================================================
+# EXPLAIN PREDICTION
+# ============================================================
+
+def explain_prediction(
+    text,
+    tokenizer,
+    model,
+    device
+):
 
     def classifier_fn(texts):
 
@@ -59,24 +89,32 @@ def explain_prediction(text, tokenizer, model, device):
             device
         )
 
-        # Force NumPy array
         result = np.asarray(
             result,
             dtype=np.float64
         )
 
-        # Make sure it is 2-dimensional
-        if result.ndim == 1:
-            result = result.reshape(1, -1)
+        if result.ndim != 2:
+            result = result.reshape(-1, 2)
+
+        if result.shape[1] != 2:
+            raise ValueError(
+                "Model must return probabilities "
+                "for exactly 2 classes."
+            )
 
         return result
 
+    # ========================================================
+    # LIME
+    # ========================================================
+
     explanation = explainer.explain_instance(
-        text,
-        classifier_fn,
-        labels=(0, 1),
+        text_instance=text,
+        classifier_fn=classifier_fn,
+        labels=[0, 1],
         num_features=10,
-        num_samples=500
+        num_samples=100
     )
 
     return explanation.as_list()
