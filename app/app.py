@@ -6,6 +6,7 @@ from predictor import load_model, predict
 from explain import explain_prediction
 from url_reader import extract_article
 
+
 # ============================================================
 # PAGE CONFIGURATION
 # ============================================================
@@ -15,6 +16,7 @@ st.set_page_config(
     page_icon="📰",
     layout="wide"
 )
+
 
 # ============================================================
 # SIDEBAR
@@ -50,6 +52,7 @@ with st.sidebar:
 
     st.caption("🚀 Developed by Anbuselvan")
 
+
 # ============================================================
 # LOAD MODEL
 # ============================================================
@@ -58,7 +61,9 @@ with st.sidebar:
 def initialize():
     return load_model()
 
+
 tokenizer, model, device = initialize()
+
 
 # ============================================================
 # MAIN PAGE
@@ -73,11 +78,22 @@ using a **fine-tuned DistilBERT Transformer** model.
 
 st.markdown("---")
 
+
+# ============================================================
+# NEWS TEXT INPUT
+# ============================================================
+
 news = st.text_area(
     "📝 Paste News Article",
     height=250,
     placeholder="Paste your news article here..."
 )
+
+
+# ============================================================
+# FILE UPLOAD
+# ============================================================
+
 st.markdown("### 📂 Or Upload a News File")
 
 uploaded_file = st.file_uploader(
@@ -87,11 +103,12 @@ uploaded_file = st.file_uploader(
 
 batch_df = None
 
+
 if uploaded_file is not None:
 
-    # ==========================
+    # ========================================================
     # TXT FILE
-    # ==========================
+    # ========================================================
 
     if uploaded_file.name.endswith(".txt"):
 
@@ -105,9 +122,9 @@ if uploaded_file is not None:
             height=250
         )
 
-    # ==========================
+    # ========================================================
     # CSV FILE
-    # ==========================
+    # ========================================================
 
     elif uploaded_file.name.endswith(".csv"):
 
@@ -122,11 +139,19 @@ if uploaded_file is not None:
         st.info(
             "Click 'Analyze News' to classify every article."
         )
-        st.markdown("### 🌐 Or Analyze a News URL")
+
+
+# ============================================================
+# NEWS URL
+# ============================================================
+
+st.markdown("### 🌐 Or Analyze a News URL")
 
 news_url = st.text_input(
     "Paste a news article URL"
 )
+
+
 if news_url:
 
     try:
@@ -148,139 +173,188 @@ if news_url:
     except Exception as e:
 
         st.error(f"❌ {e}")
-        
+
+
 # ============================================================
 # ANALYZE BUTTON
 # ============================================================
 
-if st.button("🔍 Analyze News", use_container_width=True):
+if st.button(
+    "🔍 Analyze News",
+    use_container_width=True
+):
 
-   if batch_df is not None:
+    # ========================================================
+    # BATCH CSV PREDICTION
+    # ========================================================
 
-    if "text" not in batch_df.columns:
+    if batch_df is not None:
 
-        st.error("CSV must contain a column named 'text'.")
+        if "text" not in batch_df.columns:
+
+            st.error(
+                "CSV must contain a column named 'text'."
+            )
+
+        else:
+
+            predictions = []
+            confidences = []
+
+            progress = st.progress(0.0)
+
+            total_articles = len(batch_df)
+
+            for i, article in enumerate(
+                batch_df["text"]
+            ):
+
+                prediction, probs = predict(
+                    str(article),
+                    tokenizer,
+                    model,
+                    device
+                )
+
+                confidence = (
+                    float(probs[prediction]) * 100
+                )
+
+                predictions.append(
+                    "Fake"
+                    if prediction == 0
+                    else "Real"
+                )
+
+                confidences.append(
+                    round(confidence, 2)
+                )
+
+                progress.progress(
+                    float((i + 1) / total_articles)
+                )
+
+            batch_df["Prediction"] = predictions
+            batch_df["Confidence"] = confidences
+
+            st.success(
+                "✅ Batch prediction completed!"
+            )
+
+            st.dataframe(batch_df)
+
+            csv = batch_df.to_csv(
+                index=False
+            ).encode("utf-8")
+
+            st.download_button(
+                "📥 Download Predictions",
+                csv,
+                "predictions.csv",
+                "text/csv"
+            )
+
+    # ========================================================
+    # SINGLE ARTICLE PREDICTION
+    # ========================================================
+
+    elif news.strip() == "":
+
+        st.warning(
+            "⚠ Please enter a news article."
+        )
 
     else:
 
-        predictions = []
-        confidences = []
-
-        progress = st.progress(0)
-
-        for i, article in enumerate(batch_df["text"]):
-
-            prediction, probs = predict(
-                str(article),
-                tokenizer,
-                model,
-                device
-            )
-
-            confidence = probs[prediction] * 100
-
-            predictions.append(
-                "Fake" if prediction == 0 else "Real"
-            )
-
-            confidences.append(
-                round(confidence, 2)
-            )
-
-            progress.progress((i + 1) / len(batch_df))
-
-        batch_df["Prediction"] = predictions
-
-        batch_df["Confidence"] = confidences
-
-        st.success("✅ Batch prediction completed!")
-
-        st.dataframe(batch_df)
-
-        csv = batch_df.to_csv(index=False).encode("utf-8")
-
-        st.download_button(
-            "📥 Download Predictions",
-            csv,
-            "predictions.csv",
-            "text/csv"
+        prediction, probs = predict(
+            news,
+            tokenizer,
+            model,
+            device
         )
 
-# ====================================================
-# SINGLE ARTICLE
-# ====================================================
+        # Convert NumPy values to Python floats
+        fake_probability = float(probs[0])
+        real_probability = float(probs[1])
+        confidence = float(probs[prediction]) * 100
 
-elif news.strip() == "":
+        st.markdown("---")
 
-    st.warning("⚠ Please enter a news article.")
+        # ====================================================
+        # PREDICTION
+        # ====================================================
 
-else:
+        st.subheader("📌 Prediction")
 
-    prediction, probs = predict(
-        news,
-        tokenizer,
-        model,
-        device
-    )
+        if prediction == 0:
 
-    confidence = probs[prediction] * 100
+            st.error(
+                "🔴 Fake News Detected"
+            )
 
-    st.markdown("---")
+        else:
 
-    # ====================================================
-    # Prediction
-    # ====================================================
+            st.success(
+                "🟢 Real News"
+            )
 
-    st.subheader("📌 Prediction")
+        # ====================================================
+        # CONFIDENCE
+        # ====================================================
 
-    if prediction == 0:
-        st.error("🔴 Fake News Detected")
-    else:
-        st.success("🟢 Real News")
+        st.subheader("🎯 Confidence Score")
 
-    # ====================================================
-    # Confidence
-    # ====================================================
-
-    st.subheader("🎯 Confidence Score")
-
-    st.progress(confidence / 100)
-
-    st.write(f"## {confidence:.2f}% Confidence")
-
-    # ====================================================
-    # Probability Cards
-    # ====================================================
-
-    st.subheader("📊 Prediction Probabilities")
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-        st.metric(
-            "🔴 Fake",
-            f"{probs[0]*100:.2f}%"
+        # Streamlit requires a normal numeric value
+        progress_value = float(
+            max(0.0, min(1.0, confidence / 100.0))
         )
 
-    with col2:
-        st.metric(
-            "🟢 Real",
-            f"{probs[1]*100:.2f}%"
+        st.progress(progress_value)
+
+        st.write(
+            f"## {confidence:.2f}% Confidence"
         )
 
-    # ====================================================
-    # Plotly Chart
-    # ====================================================
+        # ====================================================
+        # PROBABILITY CARDS
+        # ====================================================
+
+        st.subheader(
+            "📊 Prediction Probabilities"
+        )
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+
+            st.metric(
+                "🔴 Fake",
+                f"{fake_probability * 100:.2f}%"
+            )
+
+        with col2:
+
+            st.metric(
+                "🟢 Real",
+                f"{real_probability * 100:.2f}%"
+            )
+
+        # ====================================================
+        # PLOTLY CHART
+        # ====================================================
 
         fig = go.Figure()
 
         fig.add_trace(
             go.Bar(
                 x=["Fake", "Real"],
-                y=[probs[0]*100, probs[1]*100],
+                y=[
+                    fake_probability * 100,
+                    real_probability * 100
+                ],
                 text=[
-                    f"{probs[0]*100:.2f}%",
-                    f"{probs[1]*100:.2f}%"
+                    f"{fake_probability * 100:.2f}%",
+                    f"{real_probability * 100:.2f}%"
                 ],
                 textposition="outside"
             )
@@ -300,40 +374,79 @@ else:
         )
 
         # ====================================================
-        # Statistics
+        # ARTICLE STATISTICS
         # ====================================================
 
-        st.subheader("📝 Article Statistics")
+        st.subheader(
+            "📝 Article Statistics"
+        )
 
-        st.write(f"**Words:** {len(news.split())}")
-        st.write(f"**Characters:** {len(news)}")
+        st.write(
+            f"**Words:** {len(news.split())}"
+        )
+
+        st.write(
+            f"**Characters:** {len(news)}"
+        )
 
         # ====================================================
-        # Model Info
+        # MODEL INFORMATION
         # ====================================================
 
-        with st.expander("ℹ️ Model Information"):
+        with st.expander(
+            "ℹ️ Model Information"
+        ):
 
             st.write("### Model Details")
 
-            st.write("**Model:** DistilBERT")
-            st.write("**Framework:** Hugging Face Transformers")
-            st.write("**Backend:** PyTorch")
-            st.write("**Dataset Size:** 44,889 News Articles")
-            st.write("**Task:** Fake News Classification")
-            st.write("**Classes:** Fake / Real")
-            st.write(f"**Device:** {device}")
+            st.write(
+                "**Model:** DistilBERT"
+            )
+
+            st.write(
+                "**Framework:** Hugging Face Transformers"
+            )
+
+            st.write(
+                "**Backend:** PyTorch"
+            )
+
+            st.write(
+                "**Dataset Size:** 44,889 News Articles"
+            )
+
+            st.write(
+                "**Task:** Fake News Classification"
+            )
+
+            st.write(
+                "**Classes:** Fake / Real"
+            )
+
+            st.write(
+                f"**Device:** {device}"
+            )
 
         # ====================================================
-        # Raw Probabilities
+        # RAW PROBABILITIES
         # ====================================================
 
-        st.subheader("📋 Raw Probabilities")
+        st.subheader(
+            "📋 Raw Probabilities"
+        )
 
-        st.json({
-            "Fake": round(float(probs[0]), 6),
-            "Real": round(float(probs[1]), 6)
-        })
+        st.json(
+            {
+                "Fake": round(
+                    fake_probability,
+                    6
+                ),
+                "Real": round(
+                    real_probability,
+                    6
+                )
+            }
+        )
 
         # ====================================================
         # LIME EXPLANATION
@@ -341,9 +454,13 @@ else:
 
         st.markdown("---")
 
-        if st.button("🧠 Explain Prediction"):
+        if st.button(
+            "🧠 Explain Prediction"
+        ):
 
-            with st.spinner("Generating explanation..."):
+            with st.spinner(
+                "Generating explanation..."
+            ):
 
                 explanation = explain_prediction(
                     news,
@@ -352,14 +469,26 @@ else:
                     device
                 )
 
-                st.subheader("🧠 Top Influential Words")
+                st.subheader(
+                    "🧠 Top Influential Words"
+                )
 
                 for word, weight in explanation:
 
+                    weight = float(weight)
+
                     if weight > 0:
-                        st.success(f"✅ {word} ({weight:.3f})")
+
+                        st.success(
+                            f"✅ {word} ({weight:.3f})"
+                        )
+
                     else:
-                        st.error(f"❌ {word} ({weight:.3f})")
+
+                        st.error(
+                            f"❌ {word} ({weight:.3f})"
+                        )
+
 
 # ============================================================
 # FOOTER
@@ -368,5 +497,6 @@ else:
 st.markdown("---")
 
 st.caption(
-    "🚀 AI-Powered Fake News & Misinformation Detection using DistilBERT | Developed by Anbuselvan"
+    "🚀 AI-Powered Fake News & Misinformation Detection "
+    "using DistilBERT | Developed by Anbuselvan"
 )
